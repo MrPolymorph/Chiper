@@ -1,8 +1,10 @@
+use std::fs::File;
+use std::io::{BufReader, Read};
 use rand::prelude::*;
 pub struct CPU {
     pub screen: [u8; CPU::DISPLAY_WIDTH * CPU::DISPLAY_HEIGHT],
     pub interrupt: bool,
-    pub memory: [u8; 4096],
+    pub memory: Vec<u8>,
     pub keyboard: [u8; 16],
     pub stack: [u16; 16],
     pub delay_timer: u32,
@@ -19,15 +21,37 @@ pub struct CPU {
     pub nn: usize,
     pub nnn: usize,
     pub program: Vec<u8>,
+    pub run_count: u32
 }
 
 impl CPU {
     pub const DISPLAY_WIDTH: usize = 64;
     pub const DISPLAY_HEIGHT: usize = 32;
-    const INSTRUCTION_START_ADDRESS: usize = 0x200;
+
+    pub fn load_rom(file_path: &str) -> Vec<u8> {
+        println!("Loading ROM: {}", file_path);
+        let f = File::open(file_path).expect("Failed to open file");
+        let mut reader = BufReader::new(f);
+        let mut buffer = Vec::new();
+
+        reader.read_to_end(&mut buffer).expect("Failed to read file");
+        
+        buffer
+    }
     
-    pub fn run(&mut self) {
+    pub fn run(&mut self, file_path: &str) {
+        self.run_count = 0;
+        let rom = CPU::load_rom(file_path);
+        let mut buffer = vec![0; 9999];
+        
+        for (i, byte) in rom.iter().enumerate() {
+            buffer.insert(i + 0x200, *byte)
+        }
+        
+        self.memory = buffer;
+        
         loop {
+            self.run_count += 1;
             self.fetch();
             self.execute();
         }
@@ -35,6 +59,11 @@ impl CPU {
 
     /// Fetches the next instruction from memory and increments the program counter.
     fn fetch(&mut self) {
+        
+        if self.pc >= self.memory.len() as u16 {
+            panic!("Program counter out of bounds fuck yeah");
+        }
+        
         let hi_byte = self.memory[self.pc as usize] as u16;
         let lo_byte = self.memory[(self.pc + 1) as usize] as u16;
 
@@ -170,24 +199,30 @@ impl CPU {
     }
 
     fn drw(&mut self) {
-        let x = self.registers[self.x] as usize;
-        let y = self.registers[self.y] as usize;
-        let height = self.n;
-        let mut pixel: u8;
-
-        self.registers[0xF] = 0;
-
-        for y_line in 0..height {
-            pixel = self.memory[(self.i + y_line)];
+        println!("Run Count {}", self.run_count);
+        let vx = self.registers[self.x] as usize;
+        let vy = self.registers[self.y] as usize;
+        self.registers[0] = 0;
+        
+        for y_line in 0..self.n {
+            let sprite = self.memory[self.i + y_line];
+            
             for x_line in 0..8 {
-                if (pixel & (0x80 >> x_line)) != 0 {
-                    if self.screen[(x + x_line + ((y + y_line) * CPU::DISPLAY_WIDTH)) as usize] == 1 {
+                if (sprite & (0x80 >> x_line)) == u8::from(true) {
+
+                    if x_line + vx >= CPU::DISPLAY_WIDTH {
+                        return;
+                    }
+                    
+                    if self.screen[(x_line + vx) + (y_line + vy) * CPU::DISPLAY_WIDTH] == 1 {
                         self.registers[0xF] = 1;
                     }
-                    self.screen[(x + x_line + ((y + y_line) * CPU::DISPLAY_WIDTH)) as usize] ^= 1;
+                    
+                    self.screen[(x_line + vx) + (y_line + vy) * CPU::DISPLAY_WIDTH] ^= 1;
                 }
             }
         }
+        
     }
 
     fn bcd(&mut self) {
@@ -215,7 +250,7 @@ impl CPU {
         self.delay_timer = 0;
         self.sound_timer = 0;
         self.i = 0;
-        self.pc = CPU::INSTRUCTION_START_ADDRESS as u16;
+        self.pc = 0x200;
         self.stack_pointer = 0;
         self.instruction = 0;
         self.x = 0;
