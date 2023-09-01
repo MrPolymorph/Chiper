@@ -1,3 +1,4 @@
+use imgui::*;
 mod cpu;
 
 fn main() {
@@ -26,6 +27,8 @@ fn main() {
         program: vec![0; 0],
         run_count: 0
     };
+    
+    let event_loop = EventLoop::new();
     
     cpu.run(file_path);
 
