@@ -1,4 +1,15 @@
 use imgui::*;
+use futures::executor::block_on;
+use wgpu::{Device, Queue};
+use wgpu::util::DeviceExt;
+use wgpu::VertexStepMode::Instance;
+use winit::{
+    dpi::LogicalSize,
+    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
+    window::Window,
+};
+
 mod cpu;
 
 fn main() {
@@ -25,11 +36,47 @@ fn main() {
         nn: 0,
         nnn: 0,
         program: vec![0; 0],
-        run_count: 0
+        run_count: 0,
+    };
+
+    let event_loop = EventLoop::new();
+    let mut hidpi_factor = 1.0;
+    let (window, mut size, surface) = {
+        let window = Window::new(&event_loop).unwrap();
+        window.set_inner_size(LogicalSize {
+            width: 640.0,
+            height: 320.0,
+        });
+        window.set_title("chip8-rust");
+        let size = window.inner_size();
+        let surface = wgpu::Surface::create(&window);
+
+        (window, size, surface)
     };
     
-    let event_loop = EventLoop::new();
+    let adapter = Instance
+        .enumerate_adapters(wgpu::Backends::all)
+        .find(|adapter| {
+            adapter.is_surface_supported(&surface)
+        })
+        .unwrap();
     
+    let mut features = wgpu::Features::empty();
+    features |= wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+    features |= wgpu::Features::ANISOTROPIC_FILTERING;
+    
+    let (device, queue) = adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            label: None,
+            features,
+            limits: wgpu::Limits::default(),
+        },
+        None,
+    ).unwrap();
+    
+    let mut imgui = imgui::Context::create();
+    let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
+    imgui.set_ini_filename(None);
     cpu.run(file_path);
 
     assert_eq!(cpu.registers[0], 45);
