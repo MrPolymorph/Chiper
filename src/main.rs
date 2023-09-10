@@ -1,83 +1,52 @@
-use imgui::*;
-use futures::executor::block_on;
-use wgpu::{Device, Queue};
-use wgpu::util::DeviceExt;
-use wgpu::VertexStepMode::Instance;
-use winit::{
-    dpi::LogicalSize,
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
-};
+use std::time::Duration;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use crate::cpu::CPU;
 
 mod cpu;
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let file_path = &args[1];
-
-    let mut cpu = cpu::CPU {
-        screen: [0; cpu::CPU::DISPLAY_WIDTH * cpu::CPU::DISPLAY_HEIGHT],
-        interrupt: false,
-        memory: Vec::<u8>::with_capacity(9999),
-        keyboard: [0; 16],
-        stack: [0; 16],
-        delay_timer: 0,
-        sound_timer: 0,
-        registers: [0; 16],
-        i: 0,
-        pc: 0,
-        stack_pointer: 0,
-        instruction: 0,
-        program_size: 0,
-        x: 0,
-        y: 0,
-        n: 0,
-        nn: 0,
-        nnn: 0,
-        program: vec![0; 0],
-        run_count: 0,
-    };
-
-    let event_loop = EventLoop::new();
-    let mut hidpi_factor = 1.0;
-    let (window, mut size, surface) = {
-        let window = Window::new(&event_loop).unwrap();
-        window.set_inner_size(LogicalSize {
-            width: 640.0,
-            height: 320.0,
-        });
-        window.set_title("chip8-rust");
-        let size = window.inner_size();
-        let surface = wgpu::Surface::create(&window);
-
-        (window, size, surface)
-    };
+fn main() -> Result<(), String> {
+    let sdl_context = sdl2::init()?;
+    let video_subsystem = sdl_context.video()?;
     
-    let adapter = Instance
-        .enumerate_adapters(wgpu::Backends::all)
-        .find(|adapter| {
-            adapter.is_surface_supported(&surface)
-        })
-        .unwrap();
+    let window = video_subsystem
+        .window("Chip8", 800, 600)
+        .position_centered()
+        .opengl()
+        .build()
+        .map_err(|e| e.to_string())?;
     
-    let mut features = wgpu::Features::empty();
-    features |= wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
-    features |= wgpu::Features::ANISOTROPIC_FILTERING;
+    let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
     
-    let (device, queue) = adapter.request_device(
-        &wgpu::DeviceDescriptor {
-            label: None,
-            features,
-            limits: wgpu::Limits::default(),
-        },
-        None,
-    ).unwrap();
+    canvas.set_draw_color(Color::RGB(255, 0, 0));
+    canvas.clear();
+    canvas.present();
+    let mut event_pump = sdl_context.event_pump()?;
     
-    let mut imgui = imgui::Context::create();
-    let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
-    imgui.set_ini_filename(None);
-    cpu.run(file_path);
+    'running: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => break 'running,
+                _ => {}
+            }
+        }
 
-    assert_eq!(cpu.registers[0], 45);
+        canvas.clear();
+        canvas.present();
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+
+        //Remaining Game Loop
+        let args: Vec<String> = std::env::args().collect();
+        let file_path = &args[1];
+
+        CPU::run(file_path);
+    }
+    
+    Ok(())
 }
+    

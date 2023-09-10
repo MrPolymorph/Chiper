@@ -8,9 +8,6 @@ edition = "2021"
 
 [dependencies]
 rand="0.8.4"
-imgui = "0.11.0"
-winit = "0.28.6"
-image = "0.24.7"
-imgui-winit-support = "0.11.0"
-wgpu = "0.17.0"
-futures = "0.3.28"
+
+[dependencies.sdl2]
+git = "https://github.com/rust-sdl2/rust-sdl2"
